@@ -5,7 +5,7 @@ jupytext:
     extension: .md
     format_name: myst
     format_version: 0.13
-    jupytext_version: 1.11.5
+    jupytext_version: 1.13.6
 kernelspec:
   display_name: Python [conda env:text-data-class]
   language: python
@@ -15,11 +15,40 @@ kernelspec:
 ```{code-cell} ipython3
 import pandas as pd
 import datatest as dt
+import re
 from pathlib import Path
 ```
 
 ```{code-cell} ipython3
 print(Path('fixture.md').read_text())
+```
+
+```{code-cell} ipython3
+patt = re.compile(
+    "(^#+)"
+    "\s([\w -:]*)"
+    "\s+(.*?)"
+    "(?=\n)",
+    flags = re.S | re.M
+)
+```
+
+```{code-cell} ipython3
+matches = patt.findall (
+    """
+# This is a Markdown Title
+this is _italicized content_.
+
+## This is a Level 2 Subtitle
+What more is there to say?
+    """
+)
+
+output = pd.DataFrame.from_records(matches, columns=['level', 'title', 'content'])
+```
+
+```{code-cell} ipython3
+output.to_csv('output.csv')  
 ```
 
 ```{code-cell} ipython3
