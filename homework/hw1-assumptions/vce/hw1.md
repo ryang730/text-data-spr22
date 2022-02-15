@@ -60,8 +60,10 @@ txt = read('resources/data/shakespeare/shakespeare.txt',
 print(txt[:250])
 
 ```{code-cell} ipython3
+# Open local version of shakespeare.txt
 with open('shakespeare.txt', 'r') as f:
     content = f.read()
+    
 ```
 
 ```{code-cell} ipython3
@@ -91,7 +93,9 @@ Question(s):
 import re
 
 patt = re.compile(
-    "(^[A-Z]{1}[\w\s]*:)",
+    "(^[A-Z]{1}[\w ]*):"
+    "\\n([\w .,:;?!'\"]*)[\\n]+"
+    "(?=[A-Z])",
     flags=re.S | re.M
 )
 ```
@@ -102,16 +106,17 @@ matches = patt.findall(content)
 ```
 
 ```{code-cell} ipython3
-matches
-```
-
-```{code-cell} ipython3
-pd.DataFrame(matches)
-```
-
-```{code-cell} ipython3
 import pandas as pd
-pd.DataFrame.from_records(matches, columns=['speaker'])
+
+table = pd.DataFrame.from_records(matches, columns=['speaker','dialogue'])
+```
+
+```{code-cell} ipython3
+table
+```
+
+```{code-cell} ipython3
+table['speaker'].unique()
 ```
 
 ## Part 2
