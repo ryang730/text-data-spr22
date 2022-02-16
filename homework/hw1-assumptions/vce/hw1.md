@@ -92,10 +92,13 @@ Question(s):
 ```{code-cell} ipython3
 import re
 
+# regexr test
+# "(^[A-Z]{1}[\w ]*):\\n([\w .,:;?!'\"]*)[\\n]+(?=[A-Z])"
+
 patt = re.compile(
-    "(^[A-Z]{1}[\w ]*):"
-    "\\n([\w .,:;?!'\"]*)[\\n]+"
-    "(?=[A-Z])",
+    "(^[A-Z]{1}[\w ]*):" # If there is a second word, make sure it starts with a capital letter
+    "\\n([\w .,:;?!'\"]*[\\n]?[\w .,:;?!'\"\\\\]*?)"
+    "(?=\\n\\n[A-Z].*)",
     flags=re.S | re.M
 )
 ```
