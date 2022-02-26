@@ -15,15 +15,20 @@ jupyter:
 
 ```python
 # Libraries
+from dvc.api import read, get_url
+import pandas as pd
+import numpy as np
+
 import re
+
+import seaborn as sns
+
+
 ```
 
 # Get the Data
 
 ```python
-from dvc.api import read, get_url
-import pandas as pd
-
 # Read from repo using DVC
 txt = read('resources/data/shakespeare/shakespeare.txt', 
            repo='https://github.com/TLP-COI/text-data-course')
@@ -98,26 +103,6 @@ num_dia = len(re.split(r"\n\n", txt))
 num_dia
 ```
 
-```python
-# Function to get the dialogue from the text
-def get_dialogue(text):
-    
-    '''Input: the full text 
-    Returns: a dictionary of dialogue number and content'''
-
-    # Create enumerate object to count line number
-    enum = enumerate(re.split(r"\n\n", text))
-    
-    # Dict comprehension 
-    dict_dia = dict((i,j) for i,j in enum)
-
-    return dict_dia
-```
-
-```python
-get_dialogue(sample)
-```
-
 **Assumption 1b:** Within a dialogue, speaker name is something that comes before <code>:\n</code> in each split dialogue. I can use <code>^[^:]*</code> to extract it
 
 ```python
@@ -146,23 +131,49 @@ def get_dialogue_content(dialogue):
 
 **Hacky solution** Since I can't figure out a negative look ahead to get the dialogue content and want to move on with the rest of the homework, I will use <code>re.split</code> to get the speaker name & dialogue. If I have more time next week I will revisit <code>get_dialogue_content</code>
 
-```python
-# Function to split a dialogue into speaker name & dialogue content
-def split_dialogue(dialogue):
-    '''Split a dialogue into speaker name and dialogue content
-    Returns a tuple'''
-    speaker_name = re.split(":", dialogue)[0]
-    dialogue_content = re.split(":", dialogue)[1]
-    return speaker_name, dialogue_content
-```
-
-```python
-# Test the function out
-split_dialogue(sample)
-```
 
 ### Step 3: Put it all together
 
+```python
+# Function to get the dialogue from the text
+def get_dialogue(text):
+    '''Input: the full text 
+    Returns: a list of list'''
+    # Create enumerate object to count line number
+    enum = enumerate(re.split(r"\n\n", text))
+    
+    # List comprehension to put the line number and the 2 custom functions above together 
+    res = [[i,get_speaker_name(j),get_dialogue_content(j)] for i,j in enum]
+    return res
+```
+
+```python
+# Check if it works
+dia_list = get_dialogue(txt)
+dia_list[:3]
+```
+
+```python
+# Convert to pd
+df = pd.DataFrame(dia_list, columns =['line_no','speaker','dialogue'])
+# Check 
+df[:3]
+```
+
+```python
+# Remove linebreaks
+df = df.replace(r'\n',' ', regex=True) 
+```
+
+```python
+# Remove trailing/ leading white space from speaker and dialogue
+df.speaker = df.speaker.str.strip()
+df.dialogue = df.dialogue.str.strip()
+```
+
+```python
+df[:5]
+```
 
 # Part 2
 
@@ -177,24 +188,103 @@ You have likely noticed that the lines are not all from the same play! Now, we w
 This is fairly open-ended, and you are not being judged completely on accuracy. Instead, think outside the box a bit as to how you might accomplish this, and attempt to justify whatever approximations or assumptions you felt were appropriate.
 
 ```python
+# Number of unique speakers
+df.speaker.nunique()
+```
 
+```python
+# List of unique speakers
+speaker_list = df.speaker.unique()
+```
+
+```python
+speaker_list
+```
+
+**Assumption 2a** It looks like names written in all caps might be main characters?
+
+```python
+# Create a column in df to determine if the speaker name is all caps
+df['name_cap']=df.apply(lambda x: x['speaker'].isupper(), axis=1)
+```
+
+```python
+# 20 speakers with the most lines
+df.speaker.value_counts().head(20)
+```
+
+```python
+# 20 spekers with the fewest line
+df.speaker.value_counts().tail(20)
+```
+
+```python
+# Add number of line count for each speaker in df
+df['line_count'] = df.groupby(['speaker'])['line_no'].transform('count')
+```
+
+```python
+df.head()
+```
+
+```python
+# Distribution of line count
+sns.histplot(df,kde=True, x='line_count')
+```
+
+Mahority of characters have very few lines. Next I want to see the distribution split by name capitalization
+
+```python
+# Distribution of line count 
+sns.histplot(df,kde=True, x='line_count', hue = 'name_cap')
+```
+
+It looks like there are characters with a significant number of lines whose name where not capitalized. Check to see who they are.
+
+```python
+# Speakers with more than 50 lines & non-cap names:
+df.loc[(df.line_count>=50)&(df.name_cap==False)].speaker.unique()
+```
+
+Capitalized names are for named characters (not necessarily main?)
+
+```python
+# Print the non-cap names
+df.loc[(df.name_cap==False)].speaker.unique()
+```
+
+There are a few "ghost of" named charactes that are not all caps
+
+
+For each speaker, I want to get the max line number and min line number - this should give me a general idea of which speaker belongs in which play
+
+```python
+# Get min and max line number
+df['line_min']=df.groupby(['speaker'],sort=False)['line_no'].transform(min)
+df['line_max']=df.groupby(['speaker'],sort=False)['line_no'].transform(max)
+```
+
+```python
+df[40:70]
+```
+
+Generic characters without capped names are not unique to each stories, so their line min & line max are not important in determining the play title
+
+```python
+# Get a subset of dialogues with named characters only
+df_main = df[df.name_cap==True]
+```
+
+```python
+df_main.head(20)
 ```
 
 ```python
 
 ```
 
-```python
+**Assumption 2b** Named-characters whose line_max and line_min overlap are from the same play
 
-```
-
-```python
-
-```
-
-```python
-
-```
 
 # Part 3
 
@@ -224,6 +314,42 @@ This is mostly about learning to transparently document your decisions, and iter
 
 
 
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+df
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
 
 ```python
 
