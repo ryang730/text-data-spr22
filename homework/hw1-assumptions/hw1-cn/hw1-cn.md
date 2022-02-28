@@ -22,8 +22,10 @@ import numpy as np
 import re
 
 import seaborn as sns
+import matplotlib.pyplot as plt
 
-
+import warnings
+warnings.filterwarnings('ignore')
 ```
 
 # Get the Data
@@ -253,40 +255,166 @@ Capitalized names are for named characters (not necessarily main?)
 df.loc[(df.name_cap==False)].speaker.unique()
 ```
 
-There are a few "ghost of" named charactes that are not all caps
+**Observation:** There are a few "ghost of" named charactes that are not all caps
 
 
-For each speaker, I want to get the max line number and min line number - this should give me a general idea of which speaker belongs in which play
+For each speaker, I want to get the first line index and last line index - this should give me a general idea of which speaker belongs in which play
 
 ```python
-# Get min and max line number
-df['line_min']=df.groupby(['speaker'],sort=False)['line_no'].transform(min)
-df['line_max']=df.groupby(['speaker'],sort=False)['line_no'].transform(max)
+# Get first and last line number
+df['first_line']=df.groupby(['speaker'],sort=False)['line_no'].transform(min)
+df['last_line']=df.groupby(['speaker'],sort=False)['line_no'].transform(max)
 ```
 
 ```python
-df[40:70]
+# Calculate the gap between a character's line and the next 
+df['line_gap'] = df.groupby(['speaker'])['line_no'].transform(lambda x: x.diff(periods=-1)).fillna(0)
+# Give each character a unique ID number
+df['id'] = df.groupby('speaker',sort=False).ngroup()
 ```
 
-Generic characters without capped names are not unique to each stories, so their line min & line max are not important in determining the play title
+**Assumption 2b** Generic characters without capped names are not unique to each stories, so their first & last line max are not important in determining which plays they belong to. Named-characters whose line_max and line_min overlap are from the same play. I can visualize this.
 
 ```python
-# Get a subset of dialogues with named characters only
-df_main = df[df.name_cap==True]
+# Subset out characters with non-cap names & characters with only 1 lines
+df_main = df[(df.line_count > 1) & (df.name_cap==True)]
 ```
 
 ```python
-df_main.head(20)
+# Box plot
+plt.figure(figsize = (20,40))
+sns.boxplot(data=df_main, x='line_no',y='speaker',dodge=False)
+```
+
+From the figure above, I can already pick out some characters that from the same play - the last 9 (from Alonso to Francisco) are probably in the same play because their line numbers overlap and they don't have overlaps with other characters. 
+
+```python
+# Check Queen Elizabeth
+df_main[df_main.speaker=='QUEEN ELIZABETH'].tail()
+```
+
+**Caveat:** Some characters are harder to distinguish - QUEEN ELIZABETH's first line is 1229 and last line is 4398, while only having 105 lines total. According to this [Quora post](https://www.quora.com/Which-character-appears-the-most-in-Shakespeares-plays), Queen Elizabeth appeared in 4 plays and there are other recurring characters in the "Shakespeare verse" as well.
+
+**Solution:** Combine a lollipop plot with a swarm plot to show each character's first and last line, as well as each line they actually spoke.
+
+```python
+# roder the data by line index
+df_main_ordered = df_main.sort_values(by='line_no')
+
+# The lollipop is made using the hline function
+plt.figure(figsize = (20,40))
+plt.hlines(y=df_main_ordered['speaker'], xmin=df_main_ordered['first_line'], xmax=df_main_ordered['last_line'], color='lightgray', alpha=0.4)
+plt.scatter(df_main_ordered['first_line'], y=df_main_ordered['speaker'], color='black', alpha=1, label='first',marker="|")
+plt.scatter(df_main_ordered['last_line'], y=df_main_ordered['speaker'], color='black', alpha=1 , label='last',marker="|")
+
+sns.swarmplot(data=df_main_ordered, x='line_no',y='speaker',size=3,alpha=0.6,dodge=True)
+
+```
+
+The updated chart gives me an idea how to group characters into plays based on line index. Because the visualization is for unique characters, not speaking turn, I can group characters into plays, then try to determine a rule to split line numbers into separate plays. I will do the obvious groups first.
+
+```python
+# Similar plot as above, but instead of speaker name I'm using unique speaker ID
+plt.figure(figsize = (10,10))
+sns.scatterplot(data=df_main,x='line_no',y='id',legend=False)
+plt.gca().invert_yaxis()
+```
+
+### Clustering?
+
+From the above visualization, I suspect there are 9 plays in the text (at this point I haven't incorporated any outside information aside from that Quora post confirming that there are "recurring" characters in Shakespeareverse). I have tried a few different clustering methods to group the characters and perform visual checks to see if the labels align with what I think the play should be. 
+
+I am trying to clusters of lines based on the line number, the character's unique id number, the first line, last line, total line number and the gap between the current line and the chracter's next line. Since I know that sequential lines are likely from the same play. However, because of the recurring characters, I will set the n_clusters to be higher than 9 so I can capture when a group of recurring characters speak.
+
+This exercise is to see if an algorithm can "color" the points the same way I would color them so it's not an exact science - I'm merely using it as a visual guide. I added vertical lines to see how the labels would split the lines based on number
+
+```python
+from sklearn.cluster import KMeans
+from sklearn.cluster import AgglomerativeClustering
+from sklearn_extra.cluster import KMedoids
+from sklearn import cluster 
+
+
+X= df_main[['id','last_line','first_line','line_count','line_no']]
+
+# Kmeans
+# clustering = KMeans(n_clusters=12, init='k-means++', random_state=42).fit(X)
+# clustering = KMedoids(n_clusters=12, random_state=42).fit(X)
+
+# Agglomerative
+clustering = AgglomerativeClustering(n_clusters=12,linkage='ward').fit(X)
+
+# Create the plot
+plt.figure(figsize = (10,10))
+
+plt.gca().invert_yaxis()
+
+sns.scatterplot(data=df_main,x='line_no',y='id',color=None,edgecolor=None,hue=clustering.labels_,palette='deep',alpha=1)
+
+# Get the min line number for each cluster
+cluster_min =[]
+for i in range(12):
+    cmin = df_main[df_main.cluster==i]['line_no'].min()
+    cluster_min.append(cmin)
+
+# Plot vertical lines
+for xc in cluster_min:
+    plt.axvline(x=xc)
 ```
 
 ```python
+sorted(cluster_min)
+```
+
+I'm trying to estimate the play splits based on the cluster_min
+
+```python
+# split at points
+plays = [1107, 2103, 2876, 3503,4403,5149, 6120, 6943, 7222]
+```
+
+```python
+x= 0
+for i,v in enumerate(plays):
+    print(i,range(x,v))
+    x = v
+```
+
+```python
+# Function to return play number:
+def play_no(row):
+    x= 0
+    for i,v in enumerate(plays):
+        if row in range(x,v):
+            label = i
+            x = v
+            return label
+```
+
+```python
+# See if it works
+play_no(7221)
+```
+
+```python
+# Apply it to df and df_main
+df['play_no'] = df['line_no'].apply(lambda x: play_no(x))
+df_main['play_no'] = df_main['line_no'].apply(lambda x: play_no(x))
+```
+
+```python
+# Create the plot
+plt.figure(figsize = (10,10))
+
+plt.gca().invert_yaxis()
+sns.scatterplot(data=df,x='line_no',y='id',color=None,edgecolor=None,hue='play_no',palette='deep',alpha=1)
 
 ```
 
-**Assumption 2b** Named-characters whose line_max and line_min overlap are from the same play
+**Next step:** Look into source data to see if there's a way to check for accuracy
 
 
-# Part 3
+### Part 3
 
 Pick one or more of the techniques described in this chapter:
 
@@ -314,6 +442,18 @@ This is mostly about learning to transparently document your decisions, and iter
 
 
 
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
 
 ```python
 
