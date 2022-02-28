@@ -7,9 +7,9 @@ jupytext:
     format_version: 0.13
     jupytext_version: 1.11.5
 kernelspec:
-  display_name: Python [conda env:text-data-class]
+  display_name: Python [conda env:root]
   language: python
-  name: conda-env-text-data-class-py
+  name: conda-root-py
 ---
 
 # Homework: _State Your Assumptions_ 
@@ -35,7 +35,7 @@ There are three parts:
 3. Assessing and comparing characters from within each play
 
 **NB**\
-This file is merely a _template_, with instructions; do not feel constrained to using it directly if you do not wish to. 
+This file is merely a _template_, with instructions; do not feel constrained to using it directly if you do not wish to.
 
 +++
 
@@ -54,7 +54,7 @@ print(txt[:250])
 ```
 
 Make sure this works before you continue! 
-Either way, it would likely be beneficial to have the data downloaded locally to keep from needing to re-dowload it every time. 
+Either way, it would likely be beneficial to have the data downloaded locally to keep from needing to re-dowload it every time.
 
 +++
 
@@ -70,9 +70,79 @@ Split the text file into a _table_, such that
 _Hint_: you will need to use RegEx to do this rapidly. See the in-class "markdown" example!
 
 Question(s): 
-- What assumptions have you made about the text that allowed you to do this? 
+- What assumptions have you made about the text that allowed you to do this?
 
-+++
+```{code-cell} ipython3
+import pandas as pd
+import re
+```
+
+```{code-cell} ipython3
+# Use the first 250 characters as a sample
+sample = txt[:250]
+sample
+```
+
+Assumptions:
+- the speaker begins with a capitalized letter and ends with a colon
+- the dialogue begins with \n (new line) and ends with \n\n
+
+```{code-cell} ipython3
+patt_try = re.compile(
+    "(^[A-Z].+?):"  # the speaker
+    "\n{1}(.*?)\n{2}",  # the dialogue
+    flags = re.S | re.M
+)
+```
+
+```{code-cell} ipython3
+# Find `patt_try` such that:  
+matches_try = patt_try.findall(sample)
+pd.DataFrame.from_records(matches_try, columns=['speaker', 'dialogue'])
+```
+
+```{code-cell} ipython3
+# Check the last several lines to see whether they meet the assumptions
+print(txt[-330:])
+```
+
+```{code-cell} ipython3
+txt[-330:]
+```
+
+Here, the last line will be omitted according to the current assumptions because it ends with \n instead of \n\n.
+
+```{code-cell} ipython3
+# Fix the last line by adding an extra \n
+new_line = '\n'
+txt = txt + new_line
+```
+
+```{code-cell} ipython3
+patt = re.compile(
+    "(^[A-Z].+?):"  # the speaker
+    "\n{1}(.*?)\n{2}",  # the dialogue
+    flags = re.S | re.M
+)
+```
+
+```{code-cell} ipython3
+# Find `patt` such that: 
+matches = patt.findall(txt)
+df = pd.DataFrame.from_records(matches, columns=['speaker', 'dialogue'])
+df.tail()
+```
+
+```{code-cell} ipython3
+# Create a new column for line number
+df['line'] = df.index + 1
+```
+
+```{code-cell} ipython3
+# Reorder columns in the dataframe
+df = df[['speaker','line','dialogue']]
+df
+```
 
 ## Part 2
 
@@ -84,7 +154,7 @@ Now, we will add some useful metadata to our table:
 - make sure to document your decisions, assumptions, external data sources, etc. 
 
 This is fairly open-ended, and you are not being judged completely on _accuracy_. 
-Instead, think outside the box a bit as to how you might accomplish this, and attempt to justify whatever approximations or assumptions you felt were appropriate. 
+Instead, think outside the box a bit as to how you might accomplish this, and attempt to justify whatever approximations or assumptions you felt were appropriate.
 
 +++
 
@@ -107,7 +177,7 @@ Whatever you choose, you must
 3. list some possible weaknesses of your method, or ways you expect your assumptions could be violated within the text. 
 
 This is mostly about learning to transparently document your decisions, and iterate on a method for operationalizing useful analyses on text. 
-Your explanations should be understandable; homeworks will be peer-reviewed by your fellow students. 
+Your explanations should be understandable; homeworks will be peer-reviewed by your fellow students.
 
 ```{code-cell} ipython3
 
