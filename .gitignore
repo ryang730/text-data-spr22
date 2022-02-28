@@ -1,6 +1,8 @@
+# no .DS_Store
+*.DS_Store
+
 # no notebooks, only jupytext
 *.ipynb
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
