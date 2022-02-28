@@ -136,11 +136,22 @@ df.tail()
 ```{code-cell} ipython3
 # Create a new column for line number
 df['line'] = df.index + 1
+df
 ```
 
 ```{code-cell} ipython3
-# Reorder columns in the dataframe
-df = df[['speaker','line','dialogue']]
+# Split dialogue text into multiple rows
+# Ex. split row 7109 into multiple rows based on \n in the dialogue column
+(df['dialogue'].str.split('\n', expand=True).stack()
+               .reset_index(level=1, drop=True).rename('dialogue'))
+```
+
+```{code-cell} ipython3
+# Join the splitted dialogue with the original dataframe
+df = (df.drop('dialogue', axis=1)
+        .join(df['dialogue'].str.split('\n', expand=True).stack()
+              .reset_index(level=1, drop=True).rename('dialogue'))
+        .reset_index(drop=True))
 df
 ```
 
@@ -157,6 +168,24 @@ This is fairly open-ended, and you are not being judged completely on _accuracy_
 Instead, think outside the box a bit as to how you might accomplish this, and attempt to justify whatever approximations or assumptions you felt were appropriate.
 
 +++
+
+I found a Kaggle dataset about Shakespeare plays (https://www.kaggle.com/kingburrito666/shakespeare-plays). It has the following columns:
+1. Dataline
+2. Play
+3. PlayerLinenumber
+4. ActSceneLine
+5. Player
+6. PlayerLine
+
+```{code-cell} ipython3
+# Read in the data
+shakespeare = pd.read_csv('Shakespeare_data.csv')
+shakespeare[92329:92338]
+```
+
+```{code-cell} ipython3
+
+```
 
 ## Part 3
 
