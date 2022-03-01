@@ -26,6 +26,13 @@ import matplotlib.pyplot as plt
 
 import warnings
 warnings.filterwarnings('ignore')
+
+from sklearn.tree import DecisionTreeClassifier 
+from sklearn.model_selection import train_test_split 
+from sklearn import metrics
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+
 ```
 
 # Get the Data
@@ -351,22 +358,25 @@ plt.gca().invert_yaxis()
 
 sns.scatterplot(data=df_main,x='line_no',y='id',color=None,edgecolor=None,hue=clustering.labels_,palette='deep',alpha=1)
 
+# Attach cluster labels to df_main
+df_main['cluster'] = clustering.labels_
+
 # Get the min line number for each cluster
 cluster_min =[]
 for i in range(12):
     cmin = df_main[df_main.cluster==i]['line_no'].min()
     cluster_min.append(cmin)
 
-# Plot vertical lines
+# Plot vertical lines to do visual check
 for xc in cluster_min:
-    plt.axvline(x=xc)
+    plt.axvline(x=xc, color='black', linewidth=0.5)
 ```
 
 ```python
 sorted(cluster_min)
 ```
 
-I'm trying to estimate the play splits based on the cluster_min
+I'm trying to estimate the play splits based on the cluster_min. From the sorted list above and the figure, I decided to split the dataset into plays at the following line numbers
 
 ```python
 # split at points
@@ -374,14 +384,7 @@ plays = [1107, 2103, 2876, 3503,4403,5149, 6120, 6943, 7222]
 ```
 
 ```python
-x= 0
-for i,v in enumerate(plays):
-    print(i,range(x,v))
-    x = v
-```
-
-```python
-# Function to return play number:
+# Function to get play number:
 def play_no(row):
     x= 0
     for i,v in enumerate(plays):
@@ -402,8 +405,10 @@ df['play_no'] = df['line_no'].apply(lambda x: play_no(x))
 df_main['play_no'] = df_main['line_no'].apply(lambda x: play_no(x))
 ```
 
+Now, I want to see how my clustered labels perform witht the full text which includes non-main/ non-unique characters
+
 ```python
-# Create the plot
+# Re-create the plot for the full df (which includes non-main characters)
 plt.figure(figsize = (10,10))
 
 plt.gca().invert_yaxis()
@@ -411,8 +416,228 @@ sns.scatterplot(data=df,x='line_no',y='id',color=None,edgecolor=None,hue='play_n
 
 ```
 
-**Next step:** Look into source data to see if there's a way to check for accuracy
+This does not look bad - and I have not used any actual textual data or outside source yet. Because I did not know the outcome variable (names of plpays), I chose to cluster the characters based on line numbers and other lin-number-related features to see if I could use clustering analysis. 
 
+
+# Check external sources
+
+However, since Shakespeare plays are not unknown, I now look for outside sources to examine other ways to classify characters and lines. 
+
+I downloaded the csv for all of Shakespeare's lines from [Kaggle](https://www.kaggle.com/kingburrito666/shakespeare-plays?select=Shakespeare_data.csv)
+
+```python
+# Read in this data
+sp = pd.read_csv("./kaggle/Shakespeare_data.csv")
+
+sp.head()
+```
+
+```python
+len(sp)
+```
+
+The kaggle dataset is quite similar to the tiny_shakespeare data I had before, but it has more details: 
+
+1) there are Scence and Act numbers
+
+2) Each line in a character's dialogue is broken into a separate row, whereas I broke each dialogue in the tiny_shakespeare dataset into a "document"
+
+**Task:** I want to transform the sp dataset so that it somewhat resembles my df.
+
+```python
+# group lines into the same dialogue to make a "document"
+sp['dialogue'] = sp.groupby(['Play','Player','PlayerLinenumber'])['PlayerLine'].transform(lambda x : ' '.join(x))
+sp.head()
+```
+
+```python
+# drop dulicate lines
+sp = sp.drop_duplicates(subset=['Play','PlayerLinenumber','Player'])
+
+```
+
+```python
+# Drop PlayerLine, index and Dataline
+sp = sp.drop(columns = ['Dataline','PlayerLine'])
+```
+
+```python
+sp.head()
+```
+
+```python
+# Drop lines where Player is NaN
+sp = sp[sp.Player.notna()]
+
+# Reset index
+sp = sp.reset_index(drop=True)
+
+sp.head()
+```
+
+```python
+# Check number of rows after combining lines & dropping lines I don't need
+len(sp)
+```
+
+```python
+# How many plays are in sp
+sp.Play.nunique()
+```
+
+```python
+# How many unique Players
+sp.Player.nunique()
+```
+
+```python
+sp['player'] = sp.Player.str.lower()
+```
+
+```python
+sp.player.nunique()
+```
+
+sp has way more players/speakers than df
+
+
+Because tiny_shakespeare does not include all of Shakespeare's works, I have a few options:
+
+1) Drop rows from sp where sp.Player is not in df.speaker, then do a one to one match to determine exactly which line belongs to which play
+
+2) Cluster the lines in sp, then use it to predict lines in df
+
+Eventually, I also want to compare it to the manual labels I gave lines in df earlier
+
+
+### Shakespeare classifier?
+
+I decided to use the large sp data set to train a classifier to determine the name of Shakespeare's plays. 
+
+```python
+# Convert Play and Player in sp into numeric values
+sp['Player_id'] = sp.groupby('Player',sort=False).ngroup()
+sp['Play_id'] = sp.groupby('Play',sort=False).ngroup()
+```
+
+```python
+# # Note: loosely based on this: https://github.com/tmhughes81/dap/blob/master/dap.ipynb
+
+# # Vectorize dialogues from the entire Shakespeare corpus
+# vec = TfidfVectorizer()
+# tf_idf_vec = vec.fit_transform(sp['dialogue'])
+
+# # Convert the tf_idf matrix into a data frame with labels
+# tf_idf_df = pd.DataFrame(columns=vec.get_feature_names(), data=tf_idf_vec.toarray())
+
+# # Convert the tf_idf matrix into a data frame with labels
+# tf_idf_df = pd.DataFrame(columns=vec.get_feature_names(), data=tf_idf_vec.toarray())
+```
+
+```python
+# # drop dialogue from sp
+# sp_joined = sp[['Player_id','Play_id','Player','Play']]
+
+# # Combine the original data set with the tf_idf dataframe
+# sp_joined = sp_joined.join(tf_idf_df)
+```
+
+```python
+# sp_joined
+```
+
+#### Create training, validation and test data
+
+```python
+# Create empty data frames
+train = pd.DataFrame({'Play_id':[], 'Player_id':[], 'dialogue':[]})
+test = pd.DataFrame({'Play_id':[], 'Player_id':[], 'dialogue':[]})
+```
+
+I don't want to do a pure train/test split on the entire sp data because I want to make sure that the training/ validation/ test sets have samples from every play
+
+```python
+# Split sp into train and test df
+for i in sp.Play_id.unique():
+    # Get rows of each individual play
+    temp = sp[sp.Play_id==i]
+    # Do a train test split for each play so the training & test set has rows from all 
+    temp_train, temp_test = train_test_split(temp, test_size = 0.2, random_state = 42)
+    
+    # Append to the empty dataframe
+    train = train.append(temp_train)
+    test =test.append(temp_test)
+
+```
+
+```python
+# Split features
+# X_train = train.drop(columns=['Play_id'])
+# X_test = test.drop(columns=['Play_id'])
+
+X_train = train[['Player_id']]
+X_test = test[['Player_id']]
+
+y_train = train['Play_id']
+y_test = test['Play_id']
+```
+
+```python
+dt = DecisionTreeClassifier()
+dt.fit(X_train, y_train)
+y_pred = dt.predict(X_test)
+```
+
+```python
+print("Accuracy:",metrics.accuracy_score(y_test, y_pred))
+```
+
+### Back to df
+
+```python
+player_df = sp.drop_duplicates(subset=['Player','Player_id'])
+player_dict = dict(zip(player_df.Player, player_df.Player_id))
+```
+
+```python
+player_dict
+```
+
+```python
+# Subset df into something cleaner but keeping play_no from clustering above for prosperity 
+tiny_df = df[['line_no','speaker','dialogue','play_no']]
+
+```
+
+```python
+# Map Player_id from sp to df
+tiny_df['Player_id'] = tiny_df.speaker.map(player_dict)
+tiny_df.head()
+```
+
+```python
+# Check for NAs
+tiny_df[tiny_df.Player_id.isna()]
+```
+
+The NAs are from so few lines that I think I'll drop them *for now* so I can move on with the rest of the homework
+
+```python
+tiny_df = tiny_df[tiny_df.Player_id.notna()]
+# Re-map
+tiny_df['Player_id'] = tiny_df.speaker.map(player_dict)
+
+tiny_df.tail()
+```
+
+```python
+#Predict
+tiny_pred = dt.predict(tiny_df[['Player_id']])
+```
+
+```python
+tiny_df.Player_id.nunique()
+```
 
 ### Part 3
 
@@ -442,6 +667,18 @@ This is mostly about learning to transparently document your decisions, and iter
 
 
 
+
+```python
+
+```
+
+```python
+
+```
+
+```python
+
+```
 
 ```python
 
