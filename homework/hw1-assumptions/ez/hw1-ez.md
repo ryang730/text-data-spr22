@@ -74,6 +74,7 @@ Question(s):
 
 ```{code-cell} ipython3
 import pandas as pd
+import numpy as np
 import re
 ```
 
@@ -197,7 +198,12 @@ shakespeare = pd.read_csv('Shakespeare_data.csv')
 shakespeare[92333:92338]
 ```
 
-I can determine the play by matching speaker to Player and dialogue to PlayerLine. For easier matches, dialogue and PlayerLine will be transformed to plain lowercase text.
+I can determine the play by matching speaker to Player and dialogue to PlayerLine. For easier matches, I will drop the empty dialogues and transform the remaining to plain lowercase text.
+
+```{code-cell} ipython3
+# df: drop the empty dialogues
+df = df[df['dialogue'] != ''].reset_index(drop=True)
+```
 
 ```{code-cell} ipython3
 # Remove punctuation and lowercase (example)
@@ -232,6 +238,65 @@ df = (df
              right_on = ['Player','che'])
       .drop(['Player','mat','che'], axis = 1)
       .rename(str.lower, axis='columns'))
+df
+```
+
+```{code-cell} ipython3
+# Check the unmatched dialogues
+df[df['play'].isnull()]
+```
+
+The number of rows increased from 25554 to 25638, indicating that some dialogues got matched more than once. In addition, there are 64 unmatched dialogues.
+
++++
+
+**Assumptions:**
+- If an unmatch and a match belong to the same line, they should correspond to the same play.
+- If the dialogue before an unmatche has a corresponding play and the dialogue after belong to the same play, the unmatch should come from the same play.
+
+```{code-cell} ipython3
+# Example of the first assumption
+# line 455 belong to Coriolanus
+# row 1569 and 1570 should come from the same play
+df[1568:1573]
+```
+
+```{code-cell} ipython3
+for i in range(1,len(df)):
+    if df.loc[i,'play'] is np.nan:
+        if ((df.loc[i,'line'] == df.loc[i-1,'line']) and # i and i-1 have the same line number
+            (df.loc[i-1,'play'] is not np.nan)): # i-1 belongs to a play
+            df.loc[i,'play'] = df.loc[i-1,'play'] # assign i with the same play
+```
+
+```{code-cell} ipython3
+# Example of the second assumption
+# row 2746 and row 2748 belong to the same play
+# => row 2747 should come from the same play
+df[2745:2750]
+```
+
+```{code-cell} ipython3
+for i in range(1,len(df)-1):
+    if df.loc[i,'play'] is np.nan:
+        if ((df.loc[i-1,'play'] is not np.nan) and # i-1 belongs to a play
+            (df.loc[i-1,'play'] == df.loc[i+1,'play'])): # i+1 belongs to the same play
+            df.loc[i,'play'] = df.loc[i-1,'play'] # assign i with the same play
+```
+
+```{code-cell} ipython3
+# Check the unmatched dialogues now
+df[df['play'].isnull()]
+```
+
+```{code-cell} ipython3
+# Manually find the play for the 4 unmatched dialogues
+df = df.fillna('Coriolanus')
+df[1823:1827]
+```
+
+```{code-cell} ipython3
+# Resulting dataframe
 df
 ```
 
