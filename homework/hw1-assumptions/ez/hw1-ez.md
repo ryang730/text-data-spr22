@@ -83,13 +83,13 @@ sample = txt[:250]
 sample
 ```
 
-Assumptions:
+**Assumptions:**
 - the speaker begins with a capitalized letter and ends with a colon
 - the dialogue begins with \n (new line) and ends with \n\n
 
 ```{code-cell} ipython3
 patt_try = re.compile(
-    "(^[A-Z].+?):"  # the speaker
+    "(^[A-Z].+?):$"  # the speaker
     "\n{1}(.*?)\n{2}",  # the dialogue
     flags = re.S | re.M
 )
@@ -118,9 +118,23 @@ new_line = '\n'
 txt = txt + new_line
 ```
 
+Another particular case that doesn't meet the assumptions is empty dialogue.
+
+```{code-cell} ipython3
+# Example of empty dialogue
+print(txt[11225:11536])
+```
+
+My assumption is that the dialogue begins with \n and ends with \n\n (a total of three \n's). However, an empty dialoge comes with only two \n's.
+
+```{code-cell} ipython3
+# Fix empty dialogue by adding an extra \n
+txt = txt.replace(':\n\n', ':\n\n\n')
+```
+
 ```{code-cell} ipython3
 patt = re.compile(
-    "(^[A-Z].+?):"  # the speaker
+    "(^[A-Z].+?):$"  # the speaker
     "\n{1}(.*?)\n{2}",  # the dialogue
     flags = re.S | re.M
 )
@@ -141,7 +155,7 @@ df
 
 ```{code-cell} ipython3
 # Split dialogue text into multiple rows
-# Ex. split row 7109 into multiple rows based on \n in the dialogue column
+# Ex. split row 7221 into multiple rows based on \n in the dialogue column
 (df['dialogue'].str.split('\n', expand=True).stack()
                .reset_index(level=1, drop=True).rename('dialogue'))
 ```
@@ -180,11 +194,45 @@ I found a Kaggle dataset about Shakespeare plays (https://www.kaggle.com/kingbur
 ```{code-cell} ipython3
 # Read in the data
 shakespeare = pd.read_csv('Shakespeare_data.csv')
-shakespeare[92329:92338]
+shakespeare[92333:92338]
+```
+
+I can determine the play by matching speaker to Player and dialogue to PlayerLine. For easier matches, dialogue and PlayerLine will be transformed to plain lowercase text.
+
+```{code-cell} ipython3
+# Remove punctuation and lowercase (example)
+(shakespeare[92333:92338]['PlayerLine']
+ .str.replace(r'[^\w\s]', '', regex=True)
+ .str.lower())
 ```
 
 ```{code-cell} ipython3
+# df: create a new column for transformed dialogue
+df['mat'] = (df['dialogue']
+             .str.replace(r'[^\w\s]', '', regex=True)
+             .str.lower())
+df.tail(3)
+```
 
+```{code-cell} ipython3
+# shakespeare: create a new column for transformed PlayerLine
+shakespeare['che'] = (shakespeare['PlayerLine']
+                      .str.replace(r'[^\w\s]', '', regex=True)
+                      .str.lower())
+shakespeare[92335:92338]
+```
+
+```{code-cell} ipython3
+# Merge df and shakespeare
+# ['speaker','mat'] == ['Player','che']
+df = (df
+      .merge(shakespeare[['Play', 'Player', 'che']], 
+             how = 'left', 
+             left_on = ['speaker','mat'], 
+             right_on = ['Player','che'])
+      .drop(['Player','mat','che'], axis = 1)
+      .rename(str.lower, axis='columns'))
+df
 ```
 
 ## Part 3
